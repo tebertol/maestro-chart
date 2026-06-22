@@ -73,8 +73,9 @@
   .rev{background:#7a5a16;color:#ffe6ad} .rev:hover{background:#8c6a22}
   .flat{background:#2a2f38;color:var(--txt)} .flat:hover{background:#343b46}
   .ord .rev,.ord .flat{height:34px;font-size:12px;flex-direction:row}
-  .oe{display:grid;grid-template-columns:1fr 1fr auto auto;gap:6px;align-items:center}
-  .oe select,.oe input{background:#0b0d11;border:1px solid var(--line);border-radius:5px;padding:6px 7px;font-family:var(--mono);font-size:12px;color:var(--txt);min-width:0}
+  .oe{display:grid;grid-template-columns:auto 1fr;gap:6px;align-items:center}
+  .oe2{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px}
+  .oe select,.oe input{background:#0b0d11;border:1px solid var(--line);border-radius:5px;padding:6px 8px;font-family:var(--mono);font-size:13px;color:var(--txt);min-width:0}
   .oe input{text-align:right}
   .oe select:focus,.oe input:focus{outline:none;border-color:var(--buy)}
   .oeb{border:none;border-radius:5px;padding:6px 10px;font-weight:700;font-size:12px;cursor:pointer;color:#fff}
@@ -163,6 +164,8 @@
         <div class="oe">
           <select id="ordType"><option value="limit">Limit</option><option value="stop">Stop</option></select>
           <input id="ordPx" type="number" step="0.25" placeholder="price">
+        </div>
+        <div class="oe2">
           <button class="oeb buy" id="buyOrdBtn" title="Place buy limit/stop order">Buy</button>
           <button class="oeb sell" id="sellOrdBtn" title="Place sell limit/stop order">Sell</button>
         </div>
@@ -201,6 +204,7 @@
     <button class="play" id="playBtn" title="Start / pause">▶</button>
     <button class="ic" id="stepBtn" title="Step one bar">⏭</button>
     <button class="ic" id="resetBtn" title="Rewind to start">⏮</button>
+    <button class="ic" id="fitBtn" title="Reset chart scale &amp; fit (undo axis drag)">⤢</button>
     <div class="speedwrap">
       <label>Speed</label>
       <input type="range" id="speed" min="1" max="100" value="35">
@@ -263,7 +267,7 @@ const chartEl=document.getElementById('chart');
 const chart=LWC.createChart(chartEl,{
   layout:{background:{type:'solid',color:'rgba(0,0,0,0)'},textColor:'#9aa0ab',
           fontFamily:'ui-monospace,Menlo,Consolas,monospace',fontSize:11},
-  grid:{vertLines:{color:'rgba(255,255,255,0.035)'},horzLines:{visible:false}},
+  grid:{vertLines:{color:'rgba(255,255,255,0.09)'},horzLines:{visible:false}},
   rightPriceScale:{visible:true,borderColor:'#262a32',scaleMargins:{top:0.08,bottom:0.08}},
   leftPriceScale:{visible:false},
   timeScale:{timeVisible:true,secondsVisible:true,borderColor:'#262a32',rightOffset:6,barSpacing:7,
@@ -299,7 +303,7 @@ function drawGrid(){
     if(top!=null&&bot!=null){
       const hi=Math.max(top,bot),lo=Math.min(top,bot);
       if((hi-lo)/inc<=1500){
-        gctx.strokeStyle='rgba(255,255,255,0.055)';gctx.lineWidth=1;
+        gctx.strokeStyle='rgba(255,255,255,0.12)';gctx.lineWidth=1;
         for(let p=Math.ceil(lo/inc)*inc;p<=hi;p+=inc){
           const y=candle.priceToCoordinate(p);if(y==null)continue;
           gctx.beginPath();gctx.moveTo(0,Math.round(y)+.5);gctx.lineTo(r.width,Math.round(y)+.5);gctx.stroke();}
@@ -404,8 +408,8 @@ function addOrderLine(o){
     lineStyle:o.type==='limit'?LWC.LineStyle.Dashed:LWC.LineStyle.LargeDashed,
     axisLabelVisible:true,title:(buy?'BUY ':'SELL ')+(o.type==='limit'?'LMT':'STP')+' '+o.qty});
 }
-function placeOrder(side,type){
-  const px=parseFloat(document.getElementById('ordPx').value);
+function placeOrder(side,type,priceArg){
+  const px=(priceArg!=null&&isFinite(priceArg))?priceArg:parseFloat(document.getElementById('ordPx').value);
   if(!(px>0)){alert('Enter a valid order price first.');return;}
   const qty=state.cpt, ref=priceNow();
   let immediate=false;                    // already through the market → fills right away
@@ -554,6 +558,33 @@ document.getElementById('flatBtn').onclick=()=>{if(state.position!==0)trade(-sta
 document.getElementById('buyOrdBtn').onclick=()=>placeOrder('buy',document.getElementById('ordType').value);
 document.getElementById('sellOrdBtn').onclick=()=>placeOrder('sell',document.getElementById('ordType').value);
 document.getElementById('orderList').addEventListener('click',ev=>{const b=ev.target.closest('button[data-id]');if(b)cancelOrder(+b.dataset.id);});
+
+/* reset chart scale (undo a Y-axis drag) + fit all bars */
+function resetScale(){
+  try{chart.priceScale('right').applyOptions({autoScale:true});}catch(e){}
+  chart.timeScale().fitContent();
+}
+document.getElementById('fitBtn').onclick=resetScale;
+
+/* click-to-place shortcuts: Ctrl+click = long, Alt+click = short.
+   type is implied by the clicked price vs current price:
+     long  above mkt = stop, below mkt = limit
+     short below mkt = stop, above mkt = limit                      */
+const tickSize=0.25;
+chartEl.addEventListener('click',ev=>{
+  if(!(ev.ctrlKey||ev.altKey))return;
+  const cur=priceNow(); if(cur==null)return;
+  const rect=chartEl.getBoundingClientRect();
+  let p=candle.coordinateToPrice(ev.clientY-rect.top);
+  if(p==null||!isFinite(p))return;
+  p=Math.round(p/tickSize)*tickSize;
+  ev.preventDefault();
+  const side=ev.ctrlKey?'buy':'sell';
+  const type=side==='buy' ? (p>cur?'stop':'limit') : (p<cur?'stop':'limit');
+  document.getElementById('ordType').value=type;
+  document.getElementById('ordPx').value=p;
+  placeOrder(side,type,p);
+});
 document.getElementById('cpt').oninput=e=>state.cpt=Math.max(1,+e.target.value||1);
 document.getElementById('ptVal').oninput=e=>{state.pointValue=+e.target.value||0;updateTradePanel();};
 document.getElementById('comm').oninput=e=>state.commission=+e.target.value||0;
