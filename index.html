@@ -596,6 +596,54 @@ chartEl.addEventListener('click',ev=>{
   document.getElementById('ordPx').value=p;
   placeOrder(side,type,p);
 });
+
+/* ---------- drag working-order lines up/down ---------- */
+let dragOrder=null;
+function orderAtY(y){
+  let best=null,bestD=7;                     // 7px grab threshold
+  for(const o of state.orders){
+    const oy=candle.priceToCoordinate(o.price);
+    if(oy==null)continue;
+    const d=Math.abs(oy-y);
+    if(d<bestD){bestD=d;best=o;}
+  }
+  return best;
+}
+chartEl.addEventListener('mousedown',ev=>{
+  if(ev.ctrlKey||ev.altKey)return;            // reserved for click-to-place
+  const rect=chartEl.getBoundingClientRect();
+  const o=orderAtY(ev.clientY-rect.top);
+  if(!o)return;
+  dragOrder=o;
+  chart.applyOptions({handleScroll:false,handleScale:false});  // freeze chart while dragging
+  chartEl.style.cursor='ns-resize';
+  ev.preventDefault();
+});
+window.addEventListener('mousemove',ev=>{
+  const rect=chartEl.getBoundingClientRect();
+  if(dragOrder){
+    let p=candle.coordinateToPrice(ev.clientY-rect.top);
+    if(p!=null&&isFinite(p)){
+      p=Math.round(p/tickSize)*tickSize;
+      if(p>0&&p!==dragOrder.price){
+        dragOrder.price=p;
+        dragOrder.line.applyOptions({price:p});
+        renderOrders();
+      }
+    }
+    ev.preventDefault();
+    return;
+  }
+  const inside=ev.clientX>=rect.left&&ev.clientX<=rect.right&&ev.clientY>=rect.top&&ev.clientY<=rect.bottom;
+  if(inside)chartEl.style.cursor=orderAtY(ev.clientY-rect.top)?'ns-resize':'';
+});
+window.addEventListener('mouseup',()=>{
+  if(dragOrder){
+    dragOrder=null;
+    chart.applyOptions({handleScroll:true,handleScale:true});
+    chartEl.style.cursor='';
+  }
+});
 document.getElementById('cpt').oninput=e=>state.cpt=Math.max(1,+e.target.value||1);
 document.getElementById('ptVal').oninput=e=>{state.pointValue=+e.target.value||0;updateTradePanel();};
 document.getElementById('comm').oninput=e=>state.commission=+e.target.value||0;
