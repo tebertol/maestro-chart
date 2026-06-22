@@ -670,7 +670,21 @@ window.addEventListener('resize',resize);
 
 /* ---------- boot ---------- */
 sizeGrid();
-loadBars(sampleToBars(SAMPLE),'NQ · 1000 tick (sample)');
+/* Load the full NQ dataset committed alongside this file in the repo.
+   Falls back to the embedded sample if the fetch fails (e.g. file:// or
+   the CSV hasn't been committed yet). */
+(function bootData(){
+  const DATA_URL='nq_1000t.csv';
+  const symEl=document.getElementById('symLabel');
+  symEl.textContent='NQ · loading…';
+  fetch(DATA_URL,{cache:'no-cache'})
+    .then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.text();})
+    .then(text=>{ loadBars(rowsToBars(parseCSV(text)),'NQ · 1000 tick'); })
+    .catch(err=>{
+      console.warn('Default data load failed ('+err.message+') — using embedded sample.');
+      loadBars(sampleToBars(SAMPLE),'NQ · sample — '+DATA_URL+' not found (use Import)');
+    });
+})();
 setDelayFromSpeed();
 requestAnimationFrame(drawGrid);
 </script>
