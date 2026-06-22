@@ -73,6 +73,19 @@
   .rev{background:#7a5a16;color:#ffe6ad} .rev:hover{background:#8c6a22}
   .flat{background:#2a2f38;color:var(--txt)} .flat:hover{background:#343b46}
   .ord .rev,.ord .flat{height:34px;font-size:12px;flex-direction:row}
+  .oe{display:grid;grid-template-columns:1fr 1fr auto auto;gap:6px;align-items:center}
+  .oe select,.oe input{background:#0b0d11;border:1px solid var(--line);border-radius:5px;padding:6px 7px;font-family:var(--mono);font-size:12px;color:var(--txt);min-width:0}
+  .oe input{text-align:right}
+  .oe select:focus,.oe input:focus{outline:none;border-color:var(--buy)}
+  .oeb{border:none;border-radius:5px;padding:6px 10px;font-weight:700;font-size:12px;cursor:pointer;color:#fff}
+  .oeb.buy{background:var(--buy)} .oeb.buy:hover{background:#3f88ff}
+  .oeb.sell{background:var(--sell)} .oeb.sell:hover{background:#ec4f60}
+  #orderList{display:flex;flex-direction:column;gap:5px}
+  .noord{color:var(--dim);font-size:11px}
+  .ordrow{display:flex;align-items:center;justify-content:space-between;gap:8px;background:#0b0d11;border:1px solid var(--line);border-left-width:3px;border-radius:5px;padding:5px 8px;font-family:var(--mono);font-size:11.5px}
+  .ordrow.b{border-left-color:var(--buy)} .ordrow.s{border-left-color:var(--sell)}
+  .ordrow button{background:none;border:none;color:var(--dim);cursor:pointer;font-size:15px;line-height:1;padding:0 2px}
+  .ordrow button:hover{color:var(--sell)}
   .field{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:6px 0}
   .field label{font-size:11px;color:var(--dim)}
   .field input,.field select{
@@ -139,13 +152,25 @@
     <!-- right order pane -->
     <div class="pane">
       <div class="grp">
-        <div class="h">Place Order</div>
+        <div class="h">Place Order — Market</div>
         <div class="ord">
           <button class="buy" id="buyBtn">BUY<small id="buyPx">—</small></button>
           <button class="sell" id="sellBtn">SELL<small id="sellPx">—</small></button>
           <button class="rev wide" id="revBtn">⇄ Reverse position</button>
           <button class="flat wide" id="flatBtn">Flatten</button>
         </div>
+        <div class="h" style="margin-top:11px">Working Order — Limit / Stop</div>
+        <div class="oe">
+          <select id="ordType"><option value="limit">Limit</option><option value="stop">Stop</option></select>
+          <input id="ordPx" type="number" step="0.25" placeholder="price">
+          <button class="oeb buy" id="buyOrdBtn" title="Place buy limit/stop order">Buy</button>
+          <button class="oeb sell" id="sellOrdBtn" title="Place sell limit/stop order">Sell</button>
+        </div>
+      </div>
+
+      <div class="grp">
+        <div class="h">Working Orders</div>
+        <div id="orderList"><div class="noord">No working orders</div></div>
       </div>
 
       <div class="grp">
@@ -206,8 +231,9 @@ const state = {
   // trading
   position:0, avgEntry:0, realized:0,
   startEquity:100000, commission:0, cpt:1, pointValue:20,
-  gridInc:10,
+  gridInc:10, orders:[],
 };
+let orderSeq=1;
 
 /* ---------- helpers ---------- */
 const pad=x=>String(x).padStart(2,'0');
@@ -299,6 +325,7 @@ function pushBar(i){
   candle.update(toC(b));
   for(const k of ['ema20','ema50','sma200']) if(state.ind[k][i]!=null) lineMap[k].update({time:b.time,value:state.ind[k][i]});
   if(state.ind.bbU[i]!=null){sBbU.update({time:b.time,value:state.ind.bbU[i]});sBbL.update({time:b.time,value:state.ind.bbL[i]});}
+  checkOrders(b);
 }
 
 /* ---------- load a dataset ---------- */
@@ -336,7 +363,7 @@ function play(){
 function pause(){state.playing=false;stopTimer();
   const b=document.getElementById('playBtn');b.textContent='▶';b.classList.remove('on');}
 function rewind(){
-  pause();state.cursor=0;
+  pause();state.cursor=0;clearOrders();
   candle.setData([toC(state.bars[0])]);
   for(const s of [sEma20,sEma50,sSma200,sBbU,sBbL])s.setData([]);
   applyVisibility();updateProgress();updateTradePanel();updateLegendLatest();
@@ -344,9 +371,8 @@ function rewind(){
 
 /* ---------- trade simulation ---------- */
 function priceNow(){return state.cursor>=0?state.bars[state.cursor].close:null;}
-function resetTrades(){state.position=0;state.avgEntry=0;state.realized=0;updateTradePanel();}
-function trade(qty){                      // qty: +buy / -sell  (signed contracts)
-  const px=priceNow();if(px==null||!qty)return;
+function resetTrades(){state.position=0;state.avgEntry=0;state.realized=0;clearOrders();updateTradePanel();}
+function executeFill(qty,px){            // core position update at an explicit fill price
   state.realized-=Math.abs(qty)*state.commission;         // commission both sides
   const old=state.position;
   if(old===0||Math.sign(old)===Math.sign(qty)){           // open / add
@@ -361,6 +387,54 @@ function trade(qty){                      // qty: +buy / -sell  (signed contract
   }
   updateTradePanel();
 }
+function trade(qty){const px=priceNow();if(px!=null&&qty)executeFill(qty,px);}   // market: fill at current close
+
+/* ----- working orders (stop / limit) ----- */
+function orderTriggered(o,bar){          // does this bar's range reach the order?
+  if(o.type==='limit') return o.side==='buy'? bar.low<=o.price : bar.high>=o.price;
+  return                       o.side==='buy'? bar.high>=o.price: bar.low<=o.price;   // stop
+}
+function orderFillPrice(o,bar){          // gap-through fills at the bar open, else at the order price
+  if(o.type==='limit') return o.side==='buy'? Math.min(o.price,bar.open):Math.max(o.price,bar.open);
+  return                       o.side==='buy'? Math.max(o.price,bar.open):Math.min(o.price,bar.open);
+}
+function addOrderLine(o){
+  const buy=o.side==='buy';
+  o.line=candle.createPriceLine({price:o.price,color:buy?'#2f7bff':'#e23b4e',lineWidth:1,
+    lineStyle:o.type==='limit'?LWC.LineStyle.Dashed:LWC.LineStyle.LargeDashed,
+    axisLabelVisible:true,title:(buy?'BUY ':'SELL ')+(o.type==='limit'?'LMT':'STP')+' '+o.qty});
+}
+function placeOrder(side,type){
+  const px=parseFloat(document.getElementById('ordPx').value);
+  if(!(px>0)){alert('Enter a valid order price first.');return;}
+  const qty=state.cpt, ref=priceNow();
+  let immediate=false;                    // already through the market → fills right away
+  if(ref!=null) immediate = type==='limit' ? (side==='buy'?ref<=px:ref>=px) : (side==='buy'?ref>=px:ref<=px);
+  if(immediate){ executeFill(side==='buy'?qty:-qty, ref); }
+  else { const o={id:orderSeq++,side,type,qty,price:px}; addOrderLine(o); state.orders.push(o); }
+  renderOrders();
+}
+function checkOrders(bar){               // evaluate resting orders against a newly revealed bar
+  if(!state.orders.length)return;
+  const remain=[];
+  for(const o of state.orders){
+    if(orderTriggered(o,bar)){ executeFill(o.side==='buy'?o.qty:-o.qty, orderFillPrice(o,bar)); candle.removePriceLine(o.line); }
+    else remain.push(o);
+  }
+  state.orders=remain; renderOrders();
+}
+function cancelOrder(id){
+  const o=state.orders.find(x=>x.id===id);if(!o)return;
+  candle.removePriceLine(o.line); state.orders=state.orders.filter(x=>x.id!==id); renderOrders();
+}
+function clearOrders(){for(const o of state.orders)if(o.line)candle.removePriceLine(o.line);state.orders=[];renderOrders();}
+function renderOrders(){
+  const box=document.getElementById('orderList');if(!box)return;
+  if(!state.orders.length){box.innerHTML='<div class="noord">No working orders</div>';return;}
+  box.innerHTML=state.orders.map(o=>{const buy=o.side==='buy';
+    return '<div class="ordrow '+(buy?'b':'s')+'"><span>'+(buy?'BUY':'SELL')+' '+(o.type==='limit'?'LMT':'STP')+' '+o.qty+' @ '+fmtPx(o.price)+'</span><button data-id="'+o.id+'">&times;</button></div>';
+  }).join('');
+}
 function unrealized(){const px=priceNow();
   return (px==null||!state.position)?0:(px-state.avgEntry)*state.position*state.pointValue;}
 
@@ -368,6 +442,8 @@ function unrealized(){const px=priceNow();
 function clsPl(v){return v>0.0001?'pl-pos':v<-0.0001?'pl-neg':'pl-zero';}
 function updateTradePanel(){
   const px=priceNow();
+  const opx=document.getElementById('ordPx');
+  if(opx&&!opx.value&&document.activeElement!==opx&&px!=null)opx.value=px;
   document.getElementById('buyPx').textContent =px==null?'—':fmtPx(px);
   document.getElementById('sellPx').textContent=px==null?'—':fmtPx(px);
   const up=unrealized(), real=state.realized, eq=state.startEquity+real+up;
@@ -475,6 +551,9 @@ document.getElementById('buyBtn').onclick=()=>trade(+state.cpt);
 document.getElementById('sellBtn').onclick=()=>trade(-state.cpt);
 document.getElementById('revBtn').onclick=()=>{if(state.position!==0)trade(-2*state.position);};
 document.getElementById('flatBtn').onclick=()=>{if(state.position!==0)trade(-state.position);};
+document.getElementById('buyOrdBtn').onclick=()=>placeOrder('buy',document.getElementById('ordType').value);
+document.getElementById('sellOrdBtn').onclick=()=>placeOrder('sell',document.getElementById('ordType').value);
+document.getElementById('orderList').addEventListener('click',ev=>{const b=ev.target.closest('button[data-id]');if(b)cancelOrder(+b.dataset.id);});
 document.getElementById('cpt').oninput=e=>state.cpt=Math.max(1,+e.target.value||1);
 document.getElementById('ptVal').oninput=e=>{state.pointValue=+e.target.value||0;updateTradePanel();};
 document.getElementById('comm').oninput=e=>state.commission=+e.target.value||0;
