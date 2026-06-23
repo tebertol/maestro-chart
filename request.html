@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<!--
+  Maestro Capital Research — Request Access page
+  SETUP: replace YOUR_FORM_ID below (search "formspree.io/f/") with the ID from
+  your Formspree form. Create a form at https://formspree.io (free), set the
+  notification email to where you want requests delivered, then paste its ID.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Request access · Maestro Capital Research</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0c0f14;          /* deep cool charcoal canvas */
+    --surface:#11161e;      /* raised panel */
+    --line:#222b36;         /* hairline */
+    --text:#e7ebf0;         /* primary text */
+    --muted:#8a94a3;        /* secondary text */
+    --gold:#c9a35b;         /* single premium accent */
+    --tide:#4a9d8e;         /* desaturated teal for the chart motif */
+    --danger:#d98a7a;
+    color-scheme: dark;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    min-height:100vh;
+    background:
+      radial-gradient(1200px 600px at 50% -10%, #161d27 0%, rgba(22,29,39,0) 60%),
+      var(--ink);
+    color:var(--text);
+    font-family:"Inter",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    line-height:1.6;
+    display:flex; align-items:center; justify-content:center;
+    padding:48px 20px;
+  }
+  /* faint chart grid, echoing the tool behind the gate */
+  body::before{
+    content:""; position:fixed; inset:0; pointer-events:none; opacity:.4;
+    background-image:
+      linear-gradient(var(--line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size:46px 46px;
+    -webkit-mask-image:radial-gradient(900px 520px at 50% 22%, #000 0%, transparent 78%);
+            mask-image:radial-gradient(900px 520px at 50% 22%, #000 0%, transparent 78%);
+  }
+  .wrap{width:100%; max-width:560px; position:relative}
+
+  .mark{display:flex; align-items:center; gap:12px; margin-bottom:30px}
+  .sigil{width:38px; height:38px; flex:0 0 auto}
+  .sigil path{fill:none; stroke:var(--tide); stroke-width:2; stroke-linecap:round; stroke-linejoin:round;
+    stroke-dasharray:160; stroke-dashoffset:160; animation:draw 1.6s ease forwards .15s}
+  .sigil circle{fill:var(--gold); opacity:0; animation:dot .4s ease forwards 1.5s}
+  @keyframes draw{to{stroke-dashoffset:0}}
+  @keyframes dot{to{opacity:1}}
+  .wordmark{font-family:"IBM Plex Mono",monospace; font-size:.74rem; letter-spacing:.26em;
+    text-transform:uppercase; color:var(--muted)}
+  .wordmark b{color:var(--text); font-weight:500}
+
+  .panel{
+    background:linear-gradient(180deg, var(--surface), #0e131a);
+    border:1px solid var(--line); border-radius:14px;
+    padding:34px 32px 30px;
+    box-shadow:0 24px 60px -30px rgba(0,0,0,.8);
+  }
+  h1{font-family:"Spectral",Georgia,serif; font-weight:500; font-size:1.92rem;
+    line-height:1.12; margin:0 0 10px; letter-spacing:-.01em}
+  .lede{color:var(--muted); margin:0 0 26px; font-size:.97rem}
+  .lede em{color:var(--gold); font-style:normal}
+
+  form{display:grid; gap:16px}
+  .field{display:grid; gap:7px}
+  label{font-size:.78rem; letter-spacing:.04em; color:var(--muted)}
+  label .opt{color:#5d6675}
+  input,textarea{
+    width:100%; background:#0b0f15; color:var(--text);
+    border:1px solid var(--line); border-radius:9px;
+    padding:11px 13px; font:inherit; font-size:.95rem;
+    transition:border-color .15s ease, box-shadow .15s ease;
+  }
+  textarea{resize:vertical; min-height:88px}
+  input::placeholder,textarea::placeholder{color:#525b69}
+  input:focus,textarea:focus{outline:none; border-color:var(--gold);
+    box-shadow:0 0 0 3px rgba(201,163,91,.15)}
+  .hp{position:absolute; left:-9999px; width:1px; height:1px; overflow:hidden}
+
+  button{
+    margin-top:6px; padding:13px 18px; border:0; border-radius:9px; cursor:pointer;
+    background:var(--gold); color:#1a1206; font:inherit; font-weight:600; font-size:.97rem;
+    letter-spacing:.01em; transition:filter .15s ease, transform .05s ease;
+  }
+  button:hover{filter:brightness(1.06)}
+  button:active{transform:translateY(1px)}
+  button:disabled{opacity:.6; cursor:default}
+
+  .note{margin:18px 2px 0; color:#6b7480; font-size:.8rem}
+  .msg{margin-top:14px; font-size:.92rem; display:none}
+  .msg.err{display:block; color:var(--danger)}
+
+  /* success state */
+  .done{display:none; text-align:center; padding:8px 4px 4px}
+  .done svg{width:46px; height:46px; margin-bottom:14px}
+  .done h2{font-family:"Spectral",serif; font-weight:500; font-size:1.4rem; margin:0 0 8px}
+  .done p{color:var(--muted); margin:0; font-size:.96rem}
+  body.sent .panel form, body.sent .panel h1, body.sent .panel .lede{display:none}
+  body.sent .done{display:block}
+
+  footer{margin-top:22px; text-align:center; color:#4f5764;
+    font-family:"IBM Plex Mono",monospace; font-size:.72rem; letter-spacing:.08em}
+
+  @media (prefers-reduced-motion:reduce){
+    .sigil path{animation:none; stroke-dashoffset:0}
+    .sigil circle{animation:none; opacity:1}
+  }
+  @media (max-width:480px){
+    .panel{padding:26px 20px} h1{font-size:1.6rem}
+  }
+</style>
+</head>
+<body>
+  <main class="wrap">
+    <div class="mark">
+      <svg class="sigil" viewBox="0 0 40 40" aria-hidden="true">
+        <path d="M3 30 L11 22 L17 26 L24 12 L31 17 L37 7"/>
+        <circle cx="37" cy="7" r="3"/>
+      </svg>
+      <div class="wordmark"><b>Maestro</b> Capital Research</div>
+    </div>
+
+    <section class="panel">
+      <h1>Request access</h1>
+      <p class="lede">The research terminal is open to <em>approved members only</em>. Tell us who you are and we'll review your request.</p>
+
+      <form id="reqForm" novalidate>
+        <div class="field">
+          <label for="name">Full name</label>
+          <input id="name" name="name" type="text" autocomplete="name" required placeholder="Jane Trader">
+        </div>
+        <div class="field">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" autocomplete="email" required placeholder="you@firm.com">
+        </div>
+        <div class="field">
+          <label for="firm">Firm or affiliation <span class="opt">(optional)</span></label>
+          <input id="firm" name="firm" type="text" placeholder="Independent, fund, prop desk…">
+        </div>
+        <div class="field">
+          <label for="use">How you'll use it <span class="opt">(optional)</span></label>
+          <textarea id="use" name="use" placeholder="A sentence on what you're hoping to access."></textarea>
+        </div>
+
+        <!-- spam honeypot: real people leave this empty -->
+        <input class="hp" type="text" name="_gotcha" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <input type="hidden" name="_subject" value="Maestro — access request">
+
+        <button id="submitBtn" type="submit">Request access</button>
+        <p class="msg err" id="errMsg">Something went wrong. Please try again, or email us directly.</p>
+      </form>
+
+      <div class="done">
+        <svg viewBox="0 0 48 48" aria-hidden="true">
+          <circle cx="24" cy="24" r="22" fill="none" stroke="#4a9d8e" stroke-width="2"></circle>
+          <path d="M15 24.5 L21 30.5 L33 17.5" fill="none" stroke="#4a9d8e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path>
+        </svg>
+        <h2>Request received</h2>
+        <p>Thanks — we'll review it and email you if you're approved. You can close this tab.</p>
+      </div>
+
+      <p class="note">Access is granted by email approval. We don't share your details.</p>
+    </section>
+
+    <footer>MAESTRO CAPITAL RESEARCH</footer>
+  </main>
+
+<script>
+  // ---- Replace YOUR_FORM_ID with your Formspree form ID ----
+  const FORM_ENDPOINT = "https://formspree.io/f/xwvdkgan";
+
+  const form = document.getElementById('reqForm');
+  const btn = document.getElementById('submitBtn');
+  const err = document.getElementById('errMsg');
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    err.classList.remove('err');
+    if (!form.reportValidity()) return;
+
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+
+    try {
+      const res = await fetch(FORM_ENDPOINT, {
+        method: 'POST',
+        body: new FormData(form),
+        headers: { 'Accept': 'application/json' }
+      });
+      if (res.ok) {
+        document.body.classList.add('sent');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        throw new Error('Bad response');
+      }
+    } catch (_) {
+      err.classList.add('err');
+      btn.disabled = false;
+      btn.textContent = 'Request access';
+    }
+  });
+</script>
+</body>
+</html>
