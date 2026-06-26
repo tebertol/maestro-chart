@@ -349,8 +349,10 @@ function sampleToBars(arr){
 
 /* ---------- replay engine ---------- */
 function setDelayFromSpeed(){const s=+document.getElementById('speed').value;
-  state.delay=Math.max(6,Math.round(520-5*s));
-  document.getElementById('rate').textContent='~'+Math.round(1000/state.delay)+' bars/s';
+  const bps=Math.pow(10,2*(s-1)/99);            // slider 1..100 -> 1..100 bars/sec (log scale)
+  state.delay=Math.max(5,Math.round(1000/bps));
+  const shown=bps<9.5?bps.toFixed(1):Math.round(bps);
+  document.getElementById('rate').textContent='~'+shown+' bars/s';
   if(state.playing){stopTimer();startTimer();}}
 function startTimer(){state.timer=setInterval(step,state.delay);}
 function stopTimer(){clearInterval(state.timer);state.timer=null;}
