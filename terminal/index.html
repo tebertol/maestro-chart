@@ -695,10 +695,9 @@ requestAnimationFrame(drawGrid);
    Redirects to the Cloudflare Access logout endpoint, which clears the
    session cookie. IDLE_MINUTES controls the inactivity window (30 or 60). */
 (function(){
-  /* Set TEAM to your Zero Trust team name: the <team> in <team>.cloudflareaccess.com
-     (find it in Zero Trust > Settings, or in the address bar on the Cloudflare login page). */
-  const TEAM = 'blue-waterfall-fd0b';
-  const LOGOUT_URL  = 'https://' + TEAM + '.cloudflareaccess.com/cdn-cgi/access/logout';
+  /* Cloudflare Access logout. Must be the APP domain (maestrocapitalresearch.com) —
+     that's where the CF_Authorization cookie lives; the team domain can't clear it. */
+  const LOGOUT_URL  = '/cdn-cgi/access/logout';
   const IDLE_MINUTES = 30;                       // <-- change to 60 for a 60-min timeout
   const logout = ()=>{ location.href = LOGOUT_URL; };
 
