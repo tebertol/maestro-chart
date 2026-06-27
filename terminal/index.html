@@ -140,6 +140,7 @@
       <span class="k" data-s="sma200"><span class="dot" style="background:var(--sma200)"></span>SMA200 <span class="v" id="vSma200">—</span></span>
       <span class="k" data-s="bb"><span class="dot" style="background:var(--bb)"></span>BB(20,2) <span class="v" id="vBb">—</span></span>
     </div>
+    <button class="btn" id="logoutBtn" title="Sign out of this session" style="margin-left:6px">⏻ Log Out</button>
   </div>
 
   <!-- ============ MAIN ============ -->
@@ -689,6 +690,27 @@ sizeGrid();
 })();
 setDelayFromSpeed();
 requestAnimationFrame(drawGrid);
+
+/* ---------- session: Log Out button + inactivity auto-logout ----------
+   Redirects to the Cloudflare Access logout endpoint, which clears the
+   session cookie. IDLE_MINUTES controls the inactivity window (30 or 60). */
+(function(){
+  const LOGOUT_URL  = '/cdn-cgi/access/logout';
+  const IDLE_MINUTES = 30;                       // <-- change to 60 for a 60-min timeout
+  const logout = ()=>{ location.href = LOGOUT_URL; };
+
+  const btn = document.getElementById('logoutBtn');
+  if(btn) btn.addEventListener('click', logout);
+
+  let idleTimer = null;
+  const resetIdle = ()=>{
+    if(idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(logout, IDLE_MINUTES*60*1000);
+  };
+  ['mousemove','mousedown','keydown','touchstart','wheel','scroll']
+    .forEach(ev => window.addEventListener(ev, resetIdle, {passive:true}));
+  resetIdle();
+})();
 </script>
 </body>
 </html>
